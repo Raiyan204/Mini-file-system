@@ -1,2 +1,5 @@
 unmad_fs
+unmad_gui
+UnmadFS.app
+*.o
 disk.img

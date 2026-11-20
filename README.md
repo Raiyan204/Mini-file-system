@@ -51,10 +51,17 @@
 
 ### Commands
 ```bash
-# Compile the binary with strict warnings (-Wall -Wextra -std=c11 -O2)
+# Compile both CLI shell, standalone C++ GUI app, and macOS App Bundle
 make
 
-# Launch the interactive file system shell
+# Launch the Standalone C++ Desktop GUI Application
+make gui
+# or directly:
+./unmad_gui
+# or on macOS:
+open UnmadFS.app
+
+# Launch the interactive terminal CLI shell
 make run
 
 # Run the automated 11-case test suite
@@ -63,7 +70,7 @@ make test
 # Inspect the raw on-disk superblock header
 make hex
 
-# Remove compiled binary and disk.img
+# Remove compiled binaries, object files, and disk.img
 make clean
 ```
 

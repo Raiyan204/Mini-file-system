@@ -2,7 +2,7 @@
 set -e
 
 echo "=== Building unmad_fs ==="
-gcc -Wall -Wextra -std=c11 -O2 unmad_fs.c -o unmad_fs
+gcc -Wall -Wextra -std=c11 -O2 unmad_fs.c unmad_fs_core.c -o unmad_fs
 rm -f disk.img
 
 echo ""
