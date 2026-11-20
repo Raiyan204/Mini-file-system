@@ -69,9 +69,17 @@
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
     (void)notification;
-    // 1. Initialize file system engine
-    if (fs_init(DISK_FILE) != 0) {
-        NSLog(@"Failed to initialize disk.img");
+    // 1. Determine persistent on-device location for disk.img
+    NSString *diskPath = @"disk.img";
+    char cwd[1024];
+    if (getcwd(cwd, sizeof(cwd)) && strcmp(cwd, "/") == 0) {
+        NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
+        NSString *parentDir = [bundlePath stringByDeletingLastPathComponent];
+        diskPath = [parentDir stringByAppendingPathComponent:@"disk.img"];
+    }
+
+    if (fs_init([diskPath UTF8String]) != 0) {
+        NSLog(@"Failed to initialize disk.img at %@", diskPath);
     }
 
     // 2. Setup WebKit configuration with message handler

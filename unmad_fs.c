@@ -24,7 +24,9 @@ int main(void) {
 
         out_buf[0] = '\0';
         fs_execute_command(line, out_buf, sizeof(out_buf));
-        if (out_buf[0]) {
+        if (strcmp(out_buf, "__CLEAR_SCREEN__\n") == 0) {
+            printf("\033[H\033[J");
+        } else if (out_buf[0]) {
             printf("%s", out_buf);
         }
     }

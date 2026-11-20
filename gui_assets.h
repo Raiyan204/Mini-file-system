@@ -405,14 +405,16 @@ static const char *kGuiHTML = R"rawhtml(<!DOCTYPE html>
   <div class="brand">
     <div class="logo">UNMAD FS</div>
     <div class="title-group">
-      <h1>Mini File System Simulator</h1>
-      <p>1 MB Virtual Disk (2,048 Blocks &times; 512 B)</p>
+      <h1>Mini File System (Persistent On-Device Storage)</h1>
+      <p id="device-path-display">1 MB Virtual Disk &bull; Hardware Flushed (disk.img)</p>
     </div>
   </div>
   <div class="status-badges">
-    <div class="badge"><div class="badge-dot"></div><span id="badge-magic">Magic: UNMD</span></div>
+    <div class="badge" title="Data written directly to device disk via fsync"><div class="badge-dot" style="background:var(--success);"></div><span>Device Synced</span></div>
+    <div class="badge"><span id="badge-magic">Magic: UNMD</span></div>
     <div class="badge"><span id="badge-blocks">Free Blocks: 2028 / 2048</span></div>
     <div class="badge"><span id="badge-inodes">Free Inodes: 126 / 128</span></div>
+    <button class="action-btn" onclick="backupDisk()" style="padding:3px 10px;font-size:11px;background:#1e3a5f;border-color:var(--accent);" title="Create a physical backup of disk.img on your device">💾 Backup to Device</button>
   </div>
 </header>
 
@@ -491,17 +493,18 @@ static const char *kGuiHTML = R"rawhtml(<!DOCTYPE html>
 <div class="console-pane">
   <div class="console-header">
     <span>Interactive Shell Console</span>
-    <div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <button class="action-btn" onclick="clearConsole()" title="Clears only the text displayed on the screen. Files and memory remain 100% intact!">🧹 Clear Display</button>
       <button class="action-btn" style="padding:2px 8px;font-size:10px;" onclick="runCmd('df')">df</button>
       <button class="action-btn" style="padding:2px 8px;font-size:10px;" onclick="runCmd('map')">map</button>
-      <button class="action-btn" style="padding:2px 8px;font-size:10px;" onclick="runCmd('format')">format</button>
-      <button class="action-btn" style="padding:2px 8px;font-size:10px;" onclick="clearConsole()">Clear</button>
+      <button class="action-btn" style="padding:2px 8px;font-size:10px;" onclick="backupDisk()">💾 Backup</button>
+      <button class="action-btn btn-danger" style="padding:2px 8px;font-size:10px;margin-left:8px;" onclick="confirmFormat()">⚠️ Format Disk</button>
     </div>
   </div>
   <div class="console-output" id="console-output-el"></div>
   <div class="console-input-row">
     <span class="console-prompt" id="console-prompt-el">unmad-fs:/> </span>
-    <input type="text" class="console-input" id="console-input-el" placeholder="Type a command (format, create, write, read, ls, mkdir, cd, rmdir, info, df, map, hex)..." autofocus>
+    <input type="text" class="console-input" id="console-input-el" placeholder="Type a command (format, create, write, read, ls, mkdir, cd, rmdir, info, df, map, hex, backup, clear)..." autofocus>
   </div>
 </div>
 
@@ -565,7 +568,20 @@ static const char *kGuiHTML = R"rawhtml(<!DOCTYPE html>
   }
 
   function clearConsole() {
+    // Clears only the text written in the shell display.
+    // The filesystem state, current directory, files, inodes, and disk memory remain 100% intact!
     document.getElementById("console-output-el").textContent = "";
+    sendBackend({ action: "getState" });
+  }
+
+  function confirmFormat() {
+    if (confirm("⚠️ WARNING: Formatting will zero out disk.img and delete all files and directories!\n\nAre you sure you want to format?")) {
+      runCmd("format");
+    }
+  }
+
+  function backupDisk() {
+    runCmd("backup");
   }
 
   function runCmd(cmdStr) {
@@ -576,7 +592,11 @@ static const char *kGuiHTML = R"rawhtml(<!DOCTYPE html>
   // Backend response handler
   window.onBackendResult = function(data) {
     if (data.output) {
-      appendConsole(data.output);
+      if (data.output.trim() === "__CLEAR_SCREEN__") {
+        clearConsole();
+      } else {
+        appendConsole(data.output);
+      }
     }
     if (data.state) {
       renderState(data.state);
@@ -588,6 +608,10 @@ static const char *kGuiHTML = R"rawhtml(<!DOCTYPE html>
 
   function renderState(state) {
     currentState = state;
+    if (state.disk_path) {
+      document.getElementById("device-path-display").textContent = 
+        `Physical Disk: ${state.disk_path} • 1,048,576 Bytes (Hardware Flushed)`;
+    }
     document.getElementById("ui-cwd").textContent = state.cwd;
     document.getElementById("console-prompt-el").textContent = "unmad-fs:" + state.cwd + "> ";
     document.getElementById("badge-magic").textContent = "Magic: " + state.superblock.magic + " (UNMD)";
@@ -718,6 +742,11 @@ static const char *kGuiHTML = R"rawhtml(<!DOCTYPE html>
   inputEl.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       const val = inputEl.value.trim();
+      if (val === "clear" || val === "cls") {
+        clearConsole();
+        inputEl.value = "";
+        return;
+      }
       if (val) {
         cmdHistory.push(val);
         historyIdx = cmdHistory.length;

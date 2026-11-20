@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 _Static_assert(sizeof(superblock_t) == 512, "Superblock must be 512 bytes");
 _Static_assert(sizeof(inode_t) == 64, "Inode must be 64 bytes");
@@ -15,6 +16,10 @@ static inode_t inodes[MAX_INODES];
 static uint16_t cwd_inode = 0;
 static char disk_file_path[512] = DISK_FILE;
 
+const char* fs_get_disk_path(void) {
+    return disk_file_path;
+}
+
 static void read_block(uint32_t blk, void *buf) {
     if (!disk_fp) return;
     fseek(disk_fp, (long)blk * BLOCK_SIZE, SEEK_SET);
@@ -26,6 +31,9 @@ static void write_block(uint32_t blk, const void *buf) {
     fseek(disk_fp, (long)blk * BLOCK_SIZE, SEEK_SET);
     fwrite(buf, BLOCK_SIZE, 1, disk_fp);
     fflush(disk_fp);
+#if !defined(_WIN32)
+    fsync(fileno(disk_fp));
+#endif
 }
 
 static void sync_metadata(void) {
@@ -291,15 +299,55 @@ void fs_get_block_hex(uint32_t blk, char *out_buf, size_t max_out) {
     }
 }
 
+void fs_backup(const char *backup_path, char *out_buf, size_t max_out) {
+    if (!disk_fp) {
+        snprintf(out_buf, max_out, "Error: No disk loaded.\n");
+        return;
+    }
+    sync_metadata();
+    fflush(disk_fp);
+#if !defined(_WIN32)
+    fsync(fileno(disk_fp));
+#endif
+
+    const char *dst = (backup_path && strlen(backup_path) > 0) ? backup_path : "disk.img.backup";
+    FILE *in = fopen(disk_file_path, "rb");
+    if (!in) {
+        snprintf(out_buf, max_out, "Error: Could not read source disk image '%s'.\n", disk_file_path);
+        return;
+    }
+    FILE *out = fopen(dst, "wb");
+    if (!out) {
+        fclose(in);
+        snprintf(out_buf, max_out, "Error: Could not create backup file '%s'.\n", dst);
+        return;
+    }
+    char buf[4096];
+    size_t n;
+    size_t total = 0;
+    while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
+        fwrite(buf, 1, n, out);
+        total += n;
+    }
+    fflush(out);
+#if !defined(_WIN32)
+    fsync(fileno(out));
+#endif
+    fclose(in);
+    fclose(out);
+    snprintf(out_buf, max_out, "Disk image successfully backed up to '%s' (%zu bytes written to device).\n", dst, total);
+}
+
 void fs_get_state_json(char *out_buf, size_t max_out) {
     char cwd_str[256];
     fs_get_cwd_path(cwd_str, sizeof(cwd_str));
     size_t off = 0;
 
     off += snprintf(out_buf + off, max_out - off,
-        "{\"superblock\":{\"magic\":\"0x%08X\",\"total_blocks\":%u,\"free_blocks\":%u,"
+        "{\"disk_path\":\"%s\",\"superblock\":{\"magic\":\"0x%08X\",\"total_blocks\":%u,\"free_blocks\":%u,"
         "\"total_inodes\":%u,\"free_inodes\":%u,\"bitmap_blk\":%u,\"inode_start_blk\":%u,"
         "\"data_start_blk\":%u},\"cwd\":\"%s\",\"cwd_inode\":%u,",
+        disk_file_path,
         sb.magic, sb.total_blocks, sb.free_blocks,
         sb.total_inodes, sb.free_inodes, sb.bitmap_block, sb.inode_start_block,
         sb.data_start_block, cwd_str, cwd_inode);
@@ -618,7 +666,12 @@ void fs_execute_command(const char *cmd_line, char *out_buf, size_t max_out) {
         char *blk_s = strtok(NULL, " \t\r\n");
         uint32_t blk = blk_s ? (uint32_t)atoi(blk_s) : 0;
         fs_get_block_hex(blk, out_buf, max_out);
+    } else if (strcmp(cmd, "backup") == 0) {
+        char *dst = strtok(NULL, " \t\r\n");
+        fs_backup(dst, out_buf, max_out);
+    } else if (strcmp(cmd, "clear") == 0 || strcmp(cmd, "cls") == 0) {
+        snprintf(out_buf, max_out, "__CLEAR_SCREEN__\n");
     } else {
-        snprintf(out_buf, max_out, "Commands: format, create, write, writefill, read, ls, delete, info, mkdir, cd, pwd, rmdir, df, map, hex, exit\n");
+        snprintf(out_buf, max_out, "Commands: format, create, write, writefill, read, ls, delete, info, mkdir, cd, pwd, rmdir, df, map, hex, backup, clear, exit\n");
     }
 }

@@ -70,10 +70,12 @@ typedef struct {
 int fs_init(const char *disk_path);
 void fs_close(void);
 void fs_format(char *out, size_t out_len);
+void fs_backup(const char *backup_path, char *out_buf, size_t max_out);
 void fs_execute_command(const char *cmd_line, char *out_buf, size_t max_out);
 void fs_get_state_json(char *out_buf, size_t max_out);
 void fs_get_block_hex(uint32_t blk, char *out_buf, size_t max_out);
 void fs_get_cwd_path(char *out_buf, size_t max_out);
+const char* fs_get_disk_path(void);
 
 #ifdef __cplusplus
 }
